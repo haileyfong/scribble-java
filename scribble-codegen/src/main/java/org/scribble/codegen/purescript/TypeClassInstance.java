@@ -1,13 +1,11 @@
 package org.scribble.codegen.purescript;
 
-import java.util.List;
-
 public class TypeClassInstance {
     private final String instance;
-    private final String typeclass;
+    private final TypeClass typeclass;
     private final String[] parameters;
 
-    public TypeClassInstance(String instance, String typeclass, String[] parameters) {
+    public TypeClassInstance(String instance, TypeClass typeclass, String[] parameters) {
         this.instance = instance;
         this.typeclass = typeclass;
         this.parameters = parameters;
@@ -21,5 +19,51 @@ public class TypeClassInstance {
         }
         sb.append("\n");
         return sb.toString();
+    }
+
+    public String getInstanceName() {
+        return instance;
+    }
+
+    public TypeClass getTypeclass() {
+        return typeclass;
+    }
+
+    public String[] getParameters() {
+        return parameters;
+    }
+
+    public String getToRole() {
+        return parameters[0];
+    }
+
+    public TypeClassInstance subParams(int index, String replacement) {
+        TypeClassInstance copy = this;
+        copy.parameters[index] = replacement;
+        return copy;
+    }
+
+    public String getCurrState() {
+        switch(typeclass) {
+            case CONNECT:
+            case DISCONNECT:
+            case ACCEPT:
+                return parameters[2];
+            default:
+                return parameters[1];
+        }
+    }
+
+    public String getSuccState() {
+        switch(typeclass) {
+            case CONNECT:
+            case DISCONNECT:
+                return parameters[3];
+            case SEND:
+            case RECEIVE:
+                return parameters[2];
+            default:
+                return "";
+        }
     }
 }

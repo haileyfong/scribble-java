@@ -50,12 +50,12 @@ public class DataType {
             // TODO: Potential newtype optimisation for constructors with exactly one value
             // TODO: Derive JSON encoding/decoding
             StringBuilder sb = new StringBuilder();
-            sb.append("data " + name + " = " + name);
-            for (ForeignType type : params) {
-                sb.append(" " + type.name);
-            }
+            sb.append("data " + name + " = " + name + generateDataTypeParams());
             sb.append("\n");
             if (kind.equals(KIND_TYPE)) {
+                sb.append("instance " + "show" + name + " :: Show " + name);
+                sb.append(" where\n");
+                sb.append("  show " + name.toLowerCase() + " = \"" + name + "\"\n");
                 sb.append("derive instance generic" + name + " :: Generic " + name + " _\n");
                 sb.append("instance encodeJson" + name + " :: EncodeJson " + name + " where\n");
                 sb.append("  encodeJson = genericEncodeJsonWith jsonEncoding\n");
@@ -64,5 +64,13 @@ public class DataType {
             }
             return sb.toString();
         }
+    }
+
+    private String generateDataTypeParams() {
+        StringBuilder sb = new StringBuilder();
+        for (ForeignType type : params) {
+            sb.append(" " + type.name);
+        }
+        return sb.toString();
     }
 }

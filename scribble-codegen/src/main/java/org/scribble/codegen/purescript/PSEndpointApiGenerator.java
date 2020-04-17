@@ -14,6 +14,7 @@
 package org.scribble.codegen.purescript;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 import org.scribble.ast.Module;
 import org.scribble.ast.NonProtocolDecl;
@@ -100,9 +101,9 @@ public class PSEndpointApiGenerator
 			List<DataType> states = new ArrayList<>();
 
 			// Add the instances for initial/terminal nodes
-			instances.add(new TypeClassInstance(("initial" + role.name), "Initial", new String[] {role.name, getStateTypeName(init)}));
+			instances.add(new TypeClassInstance(("initial" + role.name), TypeClass.INITIAL, new String[] {role.name, getStateTypeName(init)}));
 			String t = term == null ? "Void" : getStateTypeName(term);
-            instances.add(new TypeClassInstance(("terminal" + role.name), "Terminal", new String[] {role.name, t}));
+            instances.add(new TypeClassInstance(("terminal" + role.name), TypeClass.TERMINAL, new String[] {role.name, t}));
 
 			Set<String> seen = new HashSet<>();
             Set<EState> level = new HashSet<>();
@@ -132,18 +133,18 @@ public class PSEndpointApiGenerator
                                 if (action.isSend()) {
                                     String type = action.mid.toString();
                                     // Add the instance and message data type
-                                    instances.add(new TypeClassInstance(("send" + curr), "Send", new String[]{to, curr, next, type}));
+                                    instances.add(new TypeClassInstance(("send" + curr), TypeClass.SEND, new String[]{to, curr, next, type}));
                                     addDatatype(datatypes, action, foreignImports);
                                 } else if (action.isDisconnect()) {
-                                    instances.add(new TypeClassInstance(("disconnect" + curr), "Disconnect", new String[]{r.toString(), to, curr, next}));
+                                    instances.add(new TypeClassInstance(("disconnect" + curr), TypeClass.DISCONNECT, new String[]{r.toString(), to, curr, next}));
 
                                 } else if (action.isRequest()) {
                                     String connectedState = curr + "Connected";
-                                    instances.add(new TypeClassInstance(("connect" + curr), "Connect", new String[]{r.toString(), to, curr, connectedState}));
+                                    instances.add(new TypeClassInstance(("connect" + curr), TypeClass.CONNECT, new String[]{r.toString(), to, curr, connectedState}));
                                     String type = action.mid.toString();
                                     // Add the instance and message data type
                                     states.add(new DataType(curr + "Connected", null, DataType.KIND_TYPE, true));
-                                    instances.add(new TypeClassInstance(("send" + curr), "Send", new String[]{to, connectedState, next, type}));
+                                    instances.add(new TypeClassInstance(("send" + curr), TypeClass.SEND, new String[]{to, connectedState, next, type}));
                                     addDatatype(datatypes, action, foreignImports);
                                 } else {
                                     // TODO: What is wrap-client + do we need to handle it?
@@ -164,7 +165,7 @@ public class PSEndpointApiGenerator
 
                                     // Add the instance and message data type and dummy state
                                     states.add(new DataType(labelState, null, DataType.KIND_TYPE, true));
-                                    instances.add(new TypeClassInstance("send" + labelState, "Send", new String[] {to, labelState, next, type}));
+                                    instances.add(new TypeClassInstance("send" + labelState, TypeClass.SEND, new String[] {to, labelState, next, type}));
                                     addDatatype(datatypes, action, foreignImports);
                                 }
 
@@ -176,7 +177,7 @@ public class PSEndpointApiGenerator
                                         .map(option -> "\"" + option.left + "\" :: " + option.right)
                                         .collect(joining(", ", "(", ")"));
 
-                                instances.add(new TypeClassInstance("select" + curr, "Select", new String[] {to, curr, branches}));
+                                instances.add(new TypeClassInstance("select" + curr, TypeClass.SELECT, new String[] {to, curr, branches}));
                             }
                         }
         					break;
@@ -187,7 +188,7 @@ public class PSEndpointApiGenerator
                                 String from = action.obj.toString();
 
                                 // Add the instance and message data type
-                                instances.add(new TypeClassInstance("receive" + curr, "Receive", new String[] {from, curr, next, type}));
+                                instances.add(new TypeClassInstance("receive" + curr, TypeClass.RECEIVE, new String[] {from, curr, next, type}));
                                 addDatatype(datatypes, action, foreignImports);
         				}
         					break;
@@ -204,7 +205,7 @@ public class PSEndpointApiGenerator
 
                                     // Add the instance and message data type and dummy state
                                     states.add(new DataType(labelState, null, DataType.KIND_TYPE, true));
-                                    instances.add(new TypeClassInstance("receive" + labelState, "Receive", new String[] {to, labelState, next, type}));
+                                    instances.add(new TypeClassInstance("receive" + labelState, TypeClass.RECEIVE, new String[] {to, labelState, next, type}));
                                     addDatatype(datatypes, action, foreignImports);
                                 }
 
@@ -215,7 +216,7 @@ public class PSEndpointApiGenerator
                                         .map(option -> "\"" + option.left + "\" :: " + option.right)
                                         .collect(joining(", ", "(", ")"));
 
-                                instances.add(new TypeClassInstance("branch" + curr, "Branch", new String[] {role.name, choosing, curr, branches}));
+                                instances.add(new TypeClassInstance("branch" + curr, TypeClass.BRANCH, new String[] {role.name, choosing, curr, branches}));
                         }
         					break;
         				case TERMINAL:
@@ -224,7 +225,7 @@ public class PSEndpointApiGenerator
                             EAction action = s.getAllActions().get(0);
                             String next = getStateTypeName(s.getAllSuccessors().get(0));
                             String to = action.obj.toString();
-                            instances.add(new TypeClassInstance(("accept" + curr), "Accept", new String[]{r.toString(), to, curr, next}));
+                            instances.add(new TypeClassInstance(("accept" + curr), TypeClass.ACCEPT, new String[]{r.toString(), to, curr, next}));
                             break;
                         case WRAP_SERVER:
                             throw new RuntimeScribbleException("Unsupported action " + s.getStateKind());
@@ -271,10 +272,20 @@ public class PSEndpointApiGenerator
 
         // ProtocolRoleNames
 
+        // Adding in AnyTypeMessage Type Class for Error Handling
+        StringBuilder newTypeClass = new StringBuilder();
+        newTypeClass.append("class AnyMessageType (t :: Type)\n");
+        newTypeClass.append("instance showType :: Show t => AnyMessageType t\n");
+        for (String dataType : datatypes.keySet()) {
+            newTypeClass.append("else instance " + dataType.toLowerCase() + "Type :: AnyMessageType " + dataType);
+            newTypeClass.append("\n");
+        }
+        sections.add(newTypeClass.toString());
+
         // EFSMs
         for (DataType role : efsms.keySet()) {
             sections.add(role.generateDataType());
-            TypeClassInstance roleName = new TypeClassInstance("roleName" + role.name, "RoleName", new String[] {role.name, ("\"" + role.name + "\"")});
+            TypeClassInstance roleName = new TypeClassInstance("roleName" + role.name, TypeClass.ROLENAME, new String[] {role.name, ("\"" + role.name + "\"")});
             sections.add(roleName.generateInstance());
 
             StringBuilder states = new StringBuilder();
@@ -286,9 +297,23 @@ public class PSEndpointApiGenerator
             StringBuilder instances = new StringBuilder();
             for (TypeClassInstance instance : efsms.get(role).right) {
                 instances.append(instance.generateInstance());
+                int instancePos = efsms.get(role).right.indexOf(instance);
+
+              // Error handling
+                if (!instance.getTypeclass().equals(TypeClass.ROLENAME) && !instance.getTypeclass().equals(TypeClass.INITIAL)) {
+                    int length = efsms.get(role).right.size();
+                    List<TypeClass> typeClasses = new ArrayList<>(Arrays.asList(TypeClass.values()));
+                    typeClasses.removeAll(Arrays.asList(TypeClass.ACCEPT, TypeClass.INITIAL, TypeClass.ROLENAME, TypeClass.TERMINAL));
+                    if (instancePos < length) {
+                        typeClasses.remove(efsms.get(role).right.get(instancePos).getTypeclass());
+                    }
+                    CustomErrorInstanceFactory factory = new CustomErrorInstanceFactory(typeClasses, instance, role.name);
+                    instances.append(factory.generate());
+                }
             }
             sections.add(instances.toString());
         }
+
 
         // Add newlines between sections
         StringBuilder module = new StringBuilder();
@@ -310,9 +335,11 @@ public class PSEndpointApiGenerator
     private static String staticImports() {
         StringBuilder sb = new StringBuilder();
 		sb.append("import Scribble.FSM\n");
+		sb.append("import Prim.TypeError (class Fail, Text, Above, Quote, Beside)\n");
 //        sb.append("import Scribble.Type.SList (type (:::), SLProxy(..), SNil, symbols)\n");
 		sb.append("import Data.Void (Void)\n");
         sb.append("import Data.Tuple (Tuple)\n");
+        sb.append("import Prelude\n");
         return sb.toString();
     }
 

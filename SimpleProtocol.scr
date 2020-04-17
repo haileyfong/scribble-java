@@ -1,0 +1,14 @@
+module SimpleProtocol;
+
+type <purescript> "String" from "Prim" as String;
+
+explicit global protocol SimpleProtocol(role Client, role Server) {
+  Connect() connect Client to Server;
+  do Simple(Client, Server);
+  disconnect Client and Server;
+}
+
+global protocol Simple(role Client, role Server) {
+   Message(String) from Client to Server;
+   Response(String) from Server to Client;
+}
